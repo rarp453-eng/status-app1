@@ -1,0 +1,21 @@
+
+{
+  "id": "./",
+  "name": "Статус-app",
+  "short_name": "Статусы",
+  "description": "Обменивайся статусами с друзьями",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#101426",
+  "theme_color": "#101426",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,0 +1,571 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d9488">
+<meta name="description" content="Обменивайся статусами с друзьями в Статус-app">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Статус-app">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<title>Статус-app</title>
+<script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+
+<style>
+:root{
+  --green:#059669;--teal:#0d9488;--mint:#d1fae5;
+  --bg:#e9f8f3;--card:#fff;--text:#173b35;--muted:#829a94;
+  --line:#e7f0ed;--shadow:0 12px 35px #135c4820;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;min-height:100vh;padding:20px 14px 40px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  color:var(--text);
+  background:linear-gradient(145deg,#d1fae5 0%,#e0f2fe 55%,#ccfbf1 100%);
+}
+button,input{font:inherit}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:active{transform:scale(.97)}
+.app{width:100%;max-width:440px;margin:0 auto}
+.card{
+  background:var(--card);border-radius:23px;padding:20px;
+  box-shadow:var(--shadow);border:1px solid #ffffffaa;
+  animation:appear .45s ease both;
+}
+@keyframes appear{from{opacity:0;transform:translateY(13px)}to{opacity:1;transform:translateY(0)}}
+@keyframes bounce{0%,100%{transform:scale(1)}40%{transform:scale(1.25) rotate(-7deg)}70%{transform:scale(.94)}}
+.hidden{display:none!important}
+.brand{display:flex;align-items:center;gap:11px}
+.brand-icon{
+  width:47px;height:47px;border-radius:16px;display:grid;place-items:center;
+  background:linear-gradient(135deg,#10b981,#0d9488);font-size:25px;
+  box-shadow:0 7px 16px #0d948844
+}
+.brand-name{font-size:21px;font-weight:850;letter-spacing:-.7px}
+.brand-sub{font-size:11px;color:var(--muted);margin-top:3px}
+.login-screen{padding-top:9vh}
+.login-card{text-align:center;padding:30px 23px}
+.login-emoji{font-size:76px;margin:5px 0 15px;display:block}
+.login-card h1{font-size:30px;margin:0 0 10px;letter-spacing:-1px}
+.login-card p{color:var(--muted);font-size:14px;line-height:1.6;margin:0 0 25px}
+.field{
+  width:100%;height:53px;border:1.5px solid var(--line);border-radius:15px;
+  padding:0 15px;background:#f8fcfa;color:var(--text);outline:none;
+  font-size:15px;transition:.2s
+}
+.field:focus{border-color:var(--teal);box-shadow:0 0 0 4px #0d948818}
+.primary{
+  min-height:50px;border:0;border-radius:15px;padding:0 18px;
+  background:linear-gradient(110deg,#059669,#0d9488);color:white;
+  font-weight:750;font-size:15px;box-shadow:0 7px 17px #05966935;
+  transition:transform .18s,filter .18s
+}
+.primary:hover{filter:brightness(1.06)}
+.login-card .primary{width:100%;margin-top:12px}
+.topbar{display:flex;align-items:center;justify-content:space-between;margin:4px 2px 18px}
+.online{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted);font-weight:650}
+.dot{width:9px;height:9px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 4px #ef44441b}
+.dot.on{background:#10b981;box-shadow:0 0 0 4px #10b98120}
+.top-actions{display:flex;gap:7px}
+.ghost{
+  min-height:42px;padding:0 12px;border:1px solid #ffffffaa;
+  border-radius:13px;background:#ffffffb8;color:var(--text);
+  font-size:12px;font-weight:700
+}
+.section-title{font-size:15px;font-weight:800;margin:0 0 15px;letter-spacing:-.3px}
+.my-status{
+  position:relative;overflow:hidden;padding:23px;margin-bottom:17px;
+  background:linear-gradient(130deg,#ffffff,#f0fdf8);
+  border:1px solid #d9f5e8
+}
+.my-status:after{
+  content:"";position:absolute;width:140px;height:140px;border-radius:50%;
+  background:#a7f3d055;right:-45px;top:-60px
+}
+.my-label{font-size:11px;font-weight:800;color:#059669;text-transform:uppercase;letter-spacing:1.4px}
+.my-content{position:relative;z-index:1;display:flex;align-items:center;gap:18px;margin-top:14px}
+.big-emoji{
+  width:83px;height:83px;flex-shrink:0;border-radius:25px;
+  background:#dcfce7;display:grid;place-items:center;font-size:48px
+}
+.my-text{font-size:22px;font-weight:850;letter-spacing:-.6px;overflow-wrap:anywhere}
+.time{font-size:11px;color:var(--muted);margin-top:7px}
+.status-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:17px}
+.status-option{
+  min-height:91px;border:1.5px solid var(--line);border-radius:17px;
+  background:#fff;color:var(--text);display:flex;flex-direction:column;
+  justify-content:center;align-items:center;gap:7px;transition:.2s;
+  font-size:12px;font-weight:700
+}
+.status-option .emoji{font-size:27px}
+.status-option.selected{
+  border-color:#10b981;background:#ecfdf5;
+  box-shadow:0 0 0 3px #10b98116,0 7px 15px #10b98114
+}
+.custom-row{display:flex;gap:8px;margin-bottom:19px}
+.custom-row .field{flex:1;min-width:0}
+.send-btn{width:54px;height:53px;flex-shrink:0;font-size:20px;padding:0}
+.people-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:13px}
+.people-count{font-size:11px;color:#059669;background:#d1fae5;padding:6px 10px;border-radius:20px;font-weight:800}
+.person{
+  display:flex;align-items:center;gap:12px;padding:12px 0;
+  border-bottom:1px solid var(--line);animation:appear .3s ease both
+}
+.person:last-child{border-bottom:0;padding-bottom:0}
+.person-emoji{
+  width:47px;height:47px;border-radius:16px;background:#effaf5;
+  display:grid;place-items:center;font-size:25px;flex-shrink:0
+}
+.person-info{min-width:0;flex:1}
+.person-name{font-size:13px;font-weight:800;overflow-wrap:anywhere}
+.person-status{font-size:12px;color:#647b75;margin-top:4px;overflow-wrap:anywhere}
+.person-time{font-size:10px;color:#9aaba6;margin-top:4px}
+.me-label{font-size:9px;color:#059669;background:#d1fae5;padding:3px 6px;border-radius:6px;margin-left:5px}
+.empty{text-align:center;padding:24px 10px;color:var(--muted);font-size:12px;line-height:1.6}
+.empty span{display:block;font-size:39px;margin-bottom:8px}
+.install{
+  display:none;width:100%;margin-top:13px;background:#fff;color:#087f68;
+  border:1px solid #b9ead8;border-radius:14px;min-height:47px;font-weight:750
+}
+.note{text-align:center;color:#6c9287;font-size:10px;margin:17px 8px 0;line-height:1.6}
+.toast{
+  position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);
+  opacity:0;pointer-events:none;background:#173b35;color:white;
+  padding:12px 18px;border-radius:13px;font-size:12px;z-index:10;
+  transition:.25s;max-width:90%;text-align:center
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+@media(min-width:700px){body{padding-top:35px}.app{max-width:440px}}
+@media(prefers-color-scheme:dark){
+ :root{--bg:#071b19;--card:#122622;--text:#e5f5ef;--muted:#91aaa2;--line:#29423b;--shadow:0 12px 35px #0004}
+ body{background:linear-gradient(145deg,#092b25,#102b39 55%,#092d2b)}
+ .card{border-color:#ffffff0c}
+ .ghost{background:#18352f;color:#e5f5ef;border-color:#315047}
+ .field{background:#0d211d;color:#e5f5ef;border-color:#29423b}
+ .my-status{background:linear-gradient(130deg,#173a30,#16342f);border-color:#285344}
+ .my-status:after{background:#10b98120}
+ .big-emoji,.person-emoji{background:#214238}
+ .status-option{background:#142c26;color:#e5f5ef;border-color:#29423b}
+ .status-option.selected{background:#174334;border-color:#10b981}
+ .person-status{color:#a3bbb2}
+ .people-count{background:#174334;color:#6ee7b7}
+ .install{background:#173a30;color:#6ee7b7;border-color:#285344}
+ .note{color:#7d9f94}
+ .toast{background:#e5f5ef;color:#173b35}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<section class="login-screen hidden" id="loginScreen">
+  <div class="card login-card">
+    <span class="login-emoji">💬</span>
+    <h1>Статус-app</h1>
+    <p>Покажи друзьям, чем занят прямо сейчас.<br>Меняй статус, когда захочешь!</p>
+    <input class="field" id="nameInput" maxlength="30" placeholder="Как тебя зовут?" autocomplete="nickname">
+    <button class="primary" id="loginButton">Войти →</button>
+  </div>
+</section>
+
+<main id="mainScreen" class="hidden">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-icon">💬</div>
+      <div>
+        <div class="brand-name">Статус-app</div>
+        <div class="brand-sub">Твой маленький онлайн-круг</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="online"><span class="dot" id="connectionDot"></span><span id="connectionText">Офлайн</span></div>
+      <button class="ghost" id="inviteButton">↗ Пригласить</button>
+    </div>
+  </div>
+
+  <section class="card my-status">
+    <div class="my-label">Мой статус</div>
+    <div class="my-content">
+      <div class="big-emoji" id="myEmoji">💭</div>
+      <div>
+        <div class="my-text" id="myStatus">Пока без статуса</div>
+        <div class="time" id="myTime">Выбери, чем занят</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-bottom:15px">
+    <h2 class="section-title">✨ Выбери настроение</h2>
+    <div class="status-grid" id="statusGrid"></div>
+    <div class="custom-row">
+      <input class="field" id="customStatus" maxlength="70" placeholder="Или напиши свой статус...">
+      <button class="primary send-btn" id="sendCustom" aria-label="Отправить">✔</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="people-head">
+      <h2 class="section-title" style="margin:0">👀 Кто что делает</h2>
+      <span class="people-count" id="peopleCount">0 человек</span>
+    </div>
+    <div id="peopleList">
+      <div class="empty"><span>🌱</span>Пока здесь тихо.<br>Пригласи друзей — и их статусы появятся здесь!</div>
+    </div>
+  </section>
+
+  <button class="install" id="installButton">⬇️ Установить приложение</button>
+  <div class="note">Статусы сохраняются, пока ты их не поменяешь.<br>Подключение работает через публичный MQTT-брокер.</div>
+</main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+"use strict";
+
+const BROKER="wss://broker.emqx.io:8084/mqtt";
+const TOPIC_ROOT="status-app-demo/v1/";
+const STORAGE_KEY="status-app-profile-v1";
+const PRESETS=[
+["😴","Сплю"],["🍜","Ем"],["📚","Учусь"],
+["🎮","Играю"],["🚶","Гуляю"],["💼","Работаю"],
+["🏠","Дома"],["❤️","Занят"],["🤫","Не беспокоить"],
+["🎉","Отдыхаю"]
+];
+
+const $=id=>document.getElementById(id);
+let profile=null,client=null,installPrompt=null;
+const people=new Map();
+
+function safeName(value){
+return String(value||"").trim().replace(/\s+/g," ").slice(0,30);
+}
+
+function showToast(message){
+const toast=$("toast");
+toast.textContent=message;
+toast.classList.add("show");
+clearTimeout(showToast.timer);
+showToast.timer=setTimeout(()=>toast.classList.remove("show"),2600);
+}
+
+function formatTime(ts){
+const seconds=Math.max(0,Math.floor((Date.now()-ts)/1000));
+if(seconds<60)return "только что";
+const minutes=Math.floor(seconds/60);
+if(minutes<60)return minutes+" мин. назад";
+const hours=Math.floor(minutes/60);
+if(hours<24)return hours+" ч. назад";
+return Math.floor(hours/24)+" дн. назад";
+}
+
+function saveProfile(){
+localStorage.setItem(STORAGE_KEY,JSON.stringify(profile));
+}
+
+function setConnection(online){
+$("connectionDot").classList.toggle("on",online);
+$("connectionText").textContent=online?"Онлайн":"Офлайн";
+}
+
+function topicFor(name){
+return TOPIC_ROOT+encodeURIComponent(name);
+}
+
+function renderMyStatus(animate=false){
+$("myEmoji").textContent=profile.emoji||"💭";
+$("myStatus").textContent=profile.status||"Пока без статуса";
+$("myTime").textContent=profile.ts?"Установлено "+formatTime(profile.ts):"Выбери, чем занят";
+if(animate){
+$("myEmoji").classList.remove("bounce");
+void $("myEmoji").offsetWidth;
+$("myEmoji").classList.add("bounce");
+}
+}
+
+function renderGrid(){
+const grid=$("statusGrid");
+grid.replaceChildren();
+PRESETS.forEach(([emoji,status])=>{
+const button=document.createElement("button");
+button.className="status-option";
+button.type="button";
+button.dataset.status=status;
+const icon=document.createElement("span");
+icon.className="emoji";
+icon.textContent=emoji;
+const text=document.createElement("span");
+text.textContent=status;
+button.append(icon,text);
+button.addEventListener("click",()=>setStatus(emoji,status));
+grid.append(button);
+});
+updateSelected();
+}
+
+function updateSelected(){
+document.querySelectorAll(".status-option").forEach(button=>{
+button.classList.toggle("selected",
+button.dataset.status===profile.status&&
+PRESETS.some(item=>item[1]===profile.status&&item[0]===profile.emoji));
+});
+}
+
+function renderPeople(){
+const list=$("peopleList");
+const entries=[...people.values()].sort((a,b)=>b.ts-a.ts);
+$("peopleCount").textContent=entries.length+" "+
+(entries.length===1?"человек":entries.length>=2&&entries.length<=4?"человека":"человек");
+list.replaceChildren();
+
+if(!entries.length){
+const empty=document.createElement("div");
+empty.className="empty";
+const icon=document.createElement("span");
+icon.textContent="🌱";
+const message=document.createElement("div");
+message.textContent="Пока здесь тихо. Пригласи друзей — и их статусы появятся здесь!";
+empty.append(icon,message);
+list.append(empty);
+return;
+}
+
+entries.forEach(person=>{
+const row=document.createElement("div");
+row.className="person";
+const emoji=document.createElement("div");
+emoji.className="person-emoji";
+emoji.textContent=person.emoji||"💬";
+const info=document.createElement("div");
+info.className="person-info";
+const name=document.createElement("div");
+name.className="person-name";
+name.textContent=person.name;
+if(profile&&person.name===profile.name){
+const me=document.createElement("span");
+me.className="me-label";
+me.textContent="ЭТО ТЫ";
+name.append(me);
+}
+const status=document.createElement("div");
+status.className="person-status";
+status.textContent=person.status;
+const time=document.createElement("div");
+time.className="person-time";
+time.textContent=formatTime(person.ts);
+info.append(name,status,time);
+row.append(emoji,info);
+list.append(row);
+});
+}
+
+function publishStatus(){
+if(!client||!client.connected||!profile)return;
+const payload={
+name:profile.name,emoji:profile.emoji,
+status:profile.status,ts:profile.ts
+};
+client.publish(topicFor(profile.name),JSON.stringify(payload),
+{qos:1,retain:true},error=>{
+if(error)showToast("Не удалось отправить статус");
+});
+}
+
+function setStatus(emoji,status){
+profile.emoji=emoji;
+profile.status=String(status).trim().slice(0,70);
+profile.ts=Date.now();
+saveProfile();
+renderMyStatus(true);
+updateSelected();
+people.set(profile.name,{
+name:profile.name,emoji:profile.emoji,
+status:profile.status,ts:profile.ts
+});
+renderPeople();
+publishStatus();
+showToast("Статус обновлён ✨");
+}
+
+function connectMQTT(){
+if(typeof mqtt==="undefined"){
+setConnection(false);
+showToast("Не удалось загрузить MQTT-библиотеку");
+return;
+}
+
+client=mqtt.connect(BROKER,{
+clientId:"statusapp_"+Math.random().toString(16).slice(2,12),
+clean:true,connectTimeout:12000,reconnectPeriod:3000,keepalive:30
+});
+
+client.on("connect",()=>{
+setConnection(true);
+client.subscribe(TOPIC_ROOT+"#",{qos:1},error=>{
+if(error)showToast("Не удалось подписаться на статусы");
+else publishStatus();
+});
+});
+
+client.on("reconnect",()=>setConnection(false));
+client.on("offline",()=>setConnection(false));
+client.on("close",()=>setConnection(false));
+client.on("error",()=>setConnection(false));
+
+client.on("message",(topic,message)=>{
+try{
+if(!topic.startsWith(TOPIC_ROOT))return;
+const data=JSON.parse(message.toString());
+if(!data||typeof data.name!=="string"||
+typeof data.status!=="string"||typeof data.emoji!=="string")return;
+const name=safeName(data.name);
+const status=data.status.trim().slice(0,70);
+const emoji=data.emoji.slice(0,12);
+const ts=Number(data.ts);
+if(!name||!status||!Number.isFinite(ts)||ts<=0)return;
+people.set(name,{name,emoji,status,ts});
+renderPeople();
+}catch(error){}
+});
+}
+
+function enterApp(name){
+profile={name,emoji:"💭",status:"Пока без статуса",ts:Date.now()};
+const saved=localStorage.getItem(STORAGE_KEY);
+if(saved){
+try{
+const parsed=JSON.parse(saved);
+if(parsed&&safeName(parsed.name)===name){
+profile={
+name,
+emoji:typeof parsed.emoji==="string"?parsed.emoji:"💭",
+status:typeof parsed.status==="string"?parsed.status.slice(0,70):"Пока без статуса",
+ts:Number(parsed.ts)||Date.now()
+};
+}
+}catch(error){}
+}
+saveProfile();
+$("loginScreen").classList.add("hidden");
+$("mainScreen").classList.remove("hidden");
+renderGrid();
+renderMyStatus();
+people.set(profile.name,{
+name:profile.name,emoji:profile.emoji,
+status:profile.status,ts:profile.ts
+});
+renderPeople();
+connectMQTT();
+}
+
+$("loginButton").addEventListener("click",()=>{
+const name=safeName($("nameInput").value);
+if(name.length<2){
+showToast("Имя должно содержать хотя бы 2 символа");
+return;
+}
+enterApp(name);
+});
+
+$("nameInput").addEventListener("keydown",event=>{
+if(event.key==="Enter")$("loginButton").click();
+});
+
+$("sendCustom").addEventListener("click",()=>{
+const value=$("customStatus").value.trim();
+if(!value){showToast("Сначала напиши свой статус");return;}
+setStatus("💬",value);
+$("customStatus").value="";
+});
+
+$("customStatus").addEventListener("keydown",event=>{
+if(event.key==="Enter")$("sendCustom").click();
+});
+
+$("inviteButton").addEventListener("click",async()=>{
+const invite={
+title:"Статус-app",
+text:"Заходи в Статус-app — будем видеть статусы друг друга!",
+url:location.href
+};
+try{
+if(navigator.share)await navigator.share(invite);
+else if(navigator.clipboard&&window.isSecureContext){
+await navigator.clipboard.writeText(location.href);
+showToast("Ссылка скопирована!");
+}else{
+const input=document.createElement("textarea");
+input.value=location.href;
+document.body.append(input);
+input.select();
+document.execCommand("copy");
+input.remove();
+showToast("Ссылка скопирована!");
+}
+}catch(error){
+if(error.name!=="AbortError")showToast("Не получилось поделиться ссылкой");
+}
+});
+
+// PWA: регистрация Service Worker
+if("serviceWorker" in navigator){
+window.addEventListener("load",()=>{
+navigator.serviceWorker.register("./sw.js")
+.then(()=>console.log("Статус-app: Service Worker готов"))
+.catch(error=>console.error("Ошибка Service Worker:",error));
+});
+}
+
+// PWA: установка Android и поддерживаемых браузеров
+window.addEventListener("beforeinstallprompt",event=>{
+event.preventDefault();
+installPrompt=event;
+$("installButton").style.display="block";
+});
+
+$("installButton").addEventListener("click",async()=>{
+if(installPrompt){
+installPrompt.prompt();
+const result=await installPrompt.userChoice;
+if(result.outcome==="accepted")showToast("Приложение устанавливается!");
+installPrompt=null;
+$("installButton").style.display="none";
+}else{
+showToast("На iPhone: Safari → Поделиться → На экран Домой");
+}
+});
+
+window.addEventListener("appinstalled",()=>{
+showToast("Статус-app установлен! 🎉");
+$("installButton").style.display="none";
+});
+
+// Время статусов
+setInterval(()=>{
+if(profile){
+$("myTime").textContent=profile.ts?"Установлено "+formatTime(profile.ts):"Выбери, чем занят";
+renderPeople();
+}
+},30000);
+
+// Восстановление профиля
+try{
+const saved=JSON.parse(localStorage.getItem(STORAGE_KEY)||"null");
+if(saved&&safeName(saved.name).length>=2){
+enterApp(safeName(saved.name));
+}else{
+$("loginScreen").classList.remove("hidden");
+}
+}catch(error){
+$("loginScreen").classList.remove("hidden");
+}
+
+})();
+</script>
+</body>
+</html>
